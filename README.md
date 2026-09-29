@@ -1,170 +1,76 @@
-# 📄 AI PDF Chat
+# PDF Chat
 
-Upload a PDF, ask questions in plain English, get answers **with the page number they came from**.
+A Streamlit app for asking questions about one PDF through the Anthropic API. It streams answers and displays page ranges and quoted passages when the model returns document citations.
 
-Built for documents people are accountable for — contracts, employee handbooks, policies,
-technical manuals, research papers — where a confidently wrong answer is worse than no answer.
+The app uploads the PDF to Anthropic's Files API, attaches its file reference to the first user turn, and includes that turn in later conversation history. It requests prompt caching for the document prefix. There is no vector database or retrieval index.
 
-```javascript
-Upload PDF ──▶ Files API (uploaded once)
-                    │
-                    ▼
-       document block { citations: on, cache: on }
-                    │
-                    ▼
-             Claude Opus 5 ── streams the answer
-                    │
-                    ▼
-        Answer + the exact passage and page it came from
+## Run locally
+
+Use Python 3.10+ in an isolated environment.
+
+```sh
+git clone https://github.com/notlestat/pdf-chat.git
+cd pdf-chat
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+cp .env.example .env
 ```
 
----
+On Windows, activate with `.venv\Scripts\Activate.ps1` in PowerShell and use `Copy-Item .env.example .env`.
 
-## Why this reads the whole document instead of using a vector database
+Set `ANTHROPIC_API_KEY` in `.env`, then run:
 
-The default architecture for "chat with your PDF" is RAG: chop the document into chunks, embed
-them, store them in a vector database, and retrieve the top few chunks for each question.
-
-This app doesn't do that. It sends the entire PDF to the model on every conversation. That is a
-deliberate trade, and here is the reasoning:
-
-|                                      | Whole document (this app)              | Chunk + vector search                              |
-| ------------------------------------ | -------------------------------------- | -------------------------------------------------- |
-| "When does this contract expire?"    | Reads all 200 pages, finds it          | Works **if** the clause lands in the top-k results |
-| "Summarise section 4"                | Reliable                               | Weak — chunking destroys document structure        |
-| Facts spread across several sections | Reliable                               | Frequently misses                                  |
-| Citations                            | Exact page numbers, built into the API | You build it yourself, chunk-level                 |
-| Infrastructure                       | None                                   | Vector DB to run, re-index, and back up            |
-| Cost per follow-up question          | \~10–20¢                               | \~2–3¢                                             |
-| Cost to load a 200-page contract     | \~$2–3, once per session               | Pennies                                            |
-
-**RAG is genuinely cheaper. Whole-document reading is genuinely more correct.**
-
-For the intended user, correctness wins and it isn't close. A solicitor billing hundreds an hour
-does not care about $3; they care that the expiry date is right and that they can click through
-to page 47 and verify it. Retrieval failures in this setting are silent — you get a fluent,
-plausible, wrong answer with no signal that the relevant clause was never retrieved.
-
-**When I would switch to RAG:** a corpus of many documents rather than one, or consumer-scale
-traffic where per-question cost dominates the economics. The chunking cost is worth paying
-when you cannot fit the corpus in context; it is not worth paying when you can.
-
-### Making it affordable anyway
-
-Reading a whole document on every question would be wasteful, so the app relies on
-[prompt caching](https://docs.claude.com/en/docs/build-with-claude/prompt-caching). The document
-block sits in the first message and never moves, so everything up to and including the PDF forms
-a stable cached prefix. The first question pays to process the document; every follow-up reads it
-back at roughly a tenth of the price.
-
-The sidebar shows this happening live — token counts, cache hits, and running cost per question.
-
----
-
-## What it does
-
-- **Cited answers.** Every claim links to a page range, with the quoted passage shown.
-- **Refuses to guess.** If the document doesn't say, it says so instead of inventing something.
-- **Live cost tracking.** Per-question and session cost, plus cache hit/miss.
-- **Adjustable reasoning effort.** Trade thoroughness against cost from the sidebar.
-- **Visible reasoning.** Expand to see how the model worked the answer out.
-
----
-
-## Quickstart
-
-```bash
-git clone https://github.com/notlestat/ai-pdf-chat.git
-cd ai-pdf-chat
-
-# uv (recommended)
-uv venv
-uv pip install -r requirements.txt
-
-# or plain pip
-python -m venv .venv && .venv/Scripts/activate   # macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
+```sh
+python -m streamlit run app.py
 ```
 
-Add your API key:
+Open the local address printed by Streamlit. Upload a PDF and ask a question. The app requires network access and API access to the configured model. PDFs leave your machine when uploaded.
 
-```bash
-cp .env.example .env        # Windows: copy .env.example .env
-# then edit .env and paste your key from console.anthropic.com
+## Configuration and behavior
+
+| Setting | Current implementation |
+|---|---|
+| API key | `ANTHROPIC_API_KEY`, loaded from `.env` or the environment |
+| Model | `claude-opus-5`, hard-coded as `MODEL` in `pdf_chat/client.py` |
+| File API beta | `files-api-2025-04-14` in `pdf_chat/client.py` |
+| App page cap | 600 pages in `pdf_chat/documents.py` |
+| Large-document notice | 150 pages or more |
+| Reasoning effort | Low, medium or high in the sidebar |
+| Output token limit | 16,000 in `pdf_chat/chat.py` |
+| Cost display | Returned usage multiplied by local price constants in `pdf_chat/chat.py` |
+
+The page cap is an application check, not a guarantee that the provider accepts every PDF below it. Model availability, SDK compatibility, document support and account limits need verification against your API account before use.
+
+The price constants are USD per million tokens: input `5.00`, output `25.00`, cache read `0.50`, and cache write `6.25`. These are checked-in assumptions, not a live billing feed. Verify and update them when changing models or provider rates. Cache hits depend on the provider; the UI reports returned cache-read usage.
+
+## Project files
+
+| File | Purpose |
+|---|---|
+| [app.py](app.py) | PDF upload, chat, sources, effort control and cost display |
+| [pdf_chat/client.py](pdf_chat/client.py) | TLS trust setup, API key loading and client configuration |
+| [pdf_chat/documents.py](pdf_chat/documents.py) | PDF validation, page count, fingerprint and file upload |
+| [pdf_chat/chat.py](pdf_chat/chat.py) | Conversation history, streaming, citations and usage estimates |
+| [requirements.txt](requirements.txt) | Dependency ranges |
+| [.env.example](.env.example) | API key placeholder |
+
+## Limits and verification
+
+The prompt asks the model to use the supplied document and state when an answer is missing. That instruction does not guarantee correctness or a citation for every claim. Check the quoted passages against the source PDF before relying on an answer.
+
+Conversation state is held in the Streamlit session. Changing the document resets the conversation. The application reuses an uploaded file within that session but does not implement remote file deletion. There is no authentication layer or automated test suite in the repository, and dependency versions are ranges rather than a lockfile.
+
+A local syntax check is available without making API calls:
+
+```sh
+python -m compileall -q app.py pdf_chat
 ```
 
-Run it:
-
-```bash
-streamlit run app.py
-```
-
----
-
-## Project layout
-
-```javascript
-app.py                 Streamlit UI — upload, chat, sources, cost panel
-pdf_chat/
-├── client.py          API client + the TLS fix described below
-├── documents.py       PDF validation and one-time upload
-└── chat.py            Prompt assembly, caching, streaming, citation parsing
-```
-
-The Anthropic integration lives entirely outside `app.py`, so it can be exercised and tested
-without starting Streamlit.
-
----
+Syntax checks do not verify uploads, model access, streaming, citations or actual costs. Those require a manual check with your account and a PDF you are permitted to upload.
 
 ## Troubleshooting
 
-### `CERTIFICATE_VERIFY_FAILED` on every request
+For a missing-key error, confirm `.env` contains a real key and run from the repository root. For model or request-parameter errors, compare the configured model and beta SDK calls with the provider's current documentation.
 
-If Python cannot reach *any* HTTPS endpoint while your browser and `curl` work fine, an
-antivirus product is almost certainly intercepting TLS. I hit this building the app on a
-machine running Norton.
-
-The cause: these products install a local root CA and re-sign every certificate. Norton's CA
-declares `Basic Constraints` without marking the extension **critical**, and OpenSSL 3.x rejects
-that outright — so Python fails while Windows' own certificate stack, which is more lenient,
-accepts it happily.
-
-The fix is [`truststore`](https://pypi.org/project/truststore/), applied in `pdf_chat/client.py`
-before any network call:
-
-```python
-import truststore
-truststore.inject_into_ssl()
-```
-
-This delegates verification to the operating system instead of OpenSSL. Certificates are still
-fully verified — just by a verifier that handles the malformed CA. Note this is **not** the same
-as `verify=False`, which disables verification altogether and should never ship.
-
-If `uv` itself fails to install packages for the same reason, use `uv pip install --system-certs`.
-
-### Answers have no citations
-
-Citations only attach to claims drawn from the document. A question the PDF doesn't cover
-produces an uncited "the document doesn't specify" — which is the intended behaviour.
-
----
-
-## What I'd change at scale
-
-- **Many documents** — this is the point where chunking and a vector index start earning their
-  keep, with whole-document reading kept for the final answer.
-- **Scanned PDFs** — Claude reads page images, so these mostly work, but a text layer via OCR
-  would make page-count validation and search more reliable.
-- **Longer cache TTL** — the 5-minute cache refreshes as long as the user keeps asking. For
-  sessions with long reading pauses, the 1-hour TTL would cost more to write but stop the
-  document falling out of cache mid-session.
-- **Model routing** — simple lookups don't need Opus. Classifying question difficulty and
-  routing the easy ones to Sonnet would cut cost meaningfully.
-
----
-
-## Built with
-
-[Claude Opus 5](https://docs.claude.com/en/docs/about-claude/models) · Anthropic Files API ·
-prompt caching · citations · [Streamlit](https://streamlit.io) · [pypdf](https://pypdf.readthedocs.io)
+`pdf_chat/client.py` calls `truststore.inject_into_ssl()` before constructing the API client to use the operating system's certificate trust store. If HTTPS requests fail, inspect the certificate chain and local trust configuration. Certificate errors can have several causes; do not disable TLS verification.
