@@ -27,6 +27,8 @@ python -m streamlit run app.py
 
 Open the local address printed by Streamlit. Upload a PDF and ask a question. The app requires network access and API access to the configured model. PDFs leave your machine when uploaded.
 
+To try the interface with the bundled fixture, use [sample/sample_contract.pdf](sample/sample_contract.pdf). Uploading it still requires API access and can incur API charges.
+
 ## Configuration and behavior
 
 | Setting | Current implementation |
@@ -42,7 +44,7 @@ Open the local address printed by Streamlit. Upload a PDF and ask a question. Th
 
 The page cap is an application check, not a guarantee that the provider accepts every PDF below it. Model availability, SDK compatibility, document support and account limits need verification against your API account before use.
 
-The price constants are USD per million tokens: input `5.00`, output `25.00`, cache read `0.50`, and cache write `6.25`. These are checked-in assumptions, not a live billing feed. Verify and update them when changing models or provider rates. Cache hits depend on the provider; the UI reports returned cache-read usage.
+The checked-in USD estimates per million tokens are input `5.00`, output `25.00`, cache read `0.50`, and cache write `6.25`. The app does not fetch current provider prices. Verify and update them when changing models or provider rates. Cache hits depend on the provider. The UI reports the cache-read usage the API returns.
 
 ## Project files
 
@@ -67,10 +69,10 @@ A local syntax check is available without making API calls:
 python -m compileall -q app.py pdf_chat
 ```
 
-Syntax checks do not verify uploads, model access, streaming, citations or actual costs. Those require a manual check with your account and a PDF you are permitted to upload.
+Syntax checks do not verify uploads, model access, streaming, citations, or actual costs. To check those behaviors, use your account and a PDF you are permitted to upload. Compare an initial question and a follow-up with the source pages and returned usage.
 
 ## Troubleshooting
 
 For a missing-key error, confirm `.env` contains a real key and run from the repository root. For model or request-parameter errors, compare the configured model and beta SDK calls with the provider's current documentation.
 
-`pdf_chat/client.py` calls `truststore.inject_into_ssl()` before constructing the API client to use the operating system's certificate trust store. If HTTPS requests fail, inspect the certificate chain and local trust configuration. Certificate errors can have several causes; do not disable TLS verification.
+`pdf_chat/client.py` calls `truststore.inject_into_ssl()` before constructing the API client to use the operating system's certificate trust store. If HTTPS requests fail, inspect the certificate chain and local trust configuration. Certificate errors can have several causes. Do not disable TLS verification.
