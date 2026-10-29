@@ -44,7 +44,7 @@ To try the interface with the bundled fixture, use [sample/sample_contract.pdf](
 
 The page cap is an application check, not a guarantee that the provider accepts every PDF below it. Model availability, SDK compatibility, document support and account limits need verification against your API account before use.
 
-The checked-in USD estimates per million tokens are input `5.00`, output `25.00`, cache read `0.50`, and cache write `6.25`. The app does not fetch current provider prices. Verify and update them when changing models or provider rates. Cache hits depend on the provider; the UI reports returned cache-read usage.
+The checked-in USD estimates per million tokens are input `5.00`, output `25.00`, cache read `0.50`, and cache write `6.25`. The app does not fetch current provider prices. Verify and update them when changing models or provider rates. Cache hits depend on the provider. The UI reports the cache-read usage the API returns.
 
 ## Project files
 
@@ -75,4 +75,4 @@ Syntax checks do not verify uploads, model access, streaming, citations, or actu
 
 For a missing-key error, confirm `.env` contains a real key and run from the repository root. For model or request-parameter errors, compare the configured model and beta SDK calls with the provider's current documentation.
 
-`pdf_chat/client.py` calls `truststore.inject_into_ssl()` before constructing the API client to use the operating system's certificate trust store. If HTTPS requests fail, inspect the certificate chain and local trust configuration. Certificate errors can have several causes; do not disable TLS verification.
+`pdf_chat/client.py` calls `truststore.inject_into_ssl()` before constructing the API client to use the operating system's certificate trust store. If HTTPS requests fail, inspect the certificate chain and local trust configuration. Certificate errors can have several causes. Do not disable TLS verification.
